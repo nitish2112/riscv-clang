@@ -2468,6 +2468,7 @@ def falign_jumps_EQ : Joined<["-"], "falign-jumps=">, Group<clang_ignored_gcc_op
 // FIXME: This option should be supported and wired up to our diognostics, but
 // ignore it for now to avoid breaking builds that use it.
 def fdiagnostics_show_location_EQ : Joined<["-"], "fdiagnostics-show-location=">, Group<clang_ignored_f_Group>;
+defm diagnostics_show_caret : BooleanFFlag<"diagnostics-show-caret">, Group<clang_ignored_f_Group>;
 
 defm fcheck_new : BooleanFFlag<"check-new">, Group<clang_ignored_f_Group>;
 defm caller_saves : BooleanFFlag<"caller-saves">, Group<clang_ignored_gcc_optimization_f_Group>;
