@@ -2524,6 +2524,12 @@ defm ipa_sra : BooleanFFlag<"ipa-sra">,
     Group<clang_ignored_gcc_optimization_f_Group>;
 defm ipa_struct_reorg : BooleanFFlag<"ipa_sra">,
     Group<clang_ignored_gcc_optimization_f_Group>;
+def ira : Joined<["-"], "fira">,
+    Group<clang_ignored_gcc_optimization_f_Group>;
+def ira_no : Joined<["-"], "fno-ira">,
+    Group<clang_ignored_gcc_optimization_f_Group>;
+defm dce : BooleanFFlag<"dce">, Group<clang_ignored_gcc_optimization_f_Group>;
+defm dse : BooleanFFlag<"dse">, Group<clang_ignored_gcc_optimization_f_Group>;
 defm ivopts : BooleanFFlag<"ivopts">, Group<clang_ignored_gcc_optimization_f_Group>;
 defm non_call_exceptions : BooleanFFlag<"non-call-exceptions">, Group<clang_ignored_f_Group>;
 defm peel_loops : BooleanFFlag<"peel-loops">, Group<clang_ignored_gcc_optimization_f_Group>;
