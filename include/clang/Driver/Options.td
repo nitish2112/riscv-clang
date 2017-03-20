@@ -1455,6 +1455,8 @@ def funroll_loops : Flag<["-"], "funroll-loops">, Group<f_Group>,
   HelpText<"Turn on loop unroller">, Flags<[CC1Option]>;
 def fno_unroll_loops : Flag<["-"], "fno-unroll-loops">, Group<f_Group>,
   HelpText<"Turn off loop unroller">, Flags<[CC1Option]>;
+def funroll_loops_all : Flag<["-"], "funroll-loops-all">, Alias<funroll_loops>;
+def fno_unroll_loops_all : Flag<["-"], "fno-unroll-loops-all">, Alias<fno_unroll_loops>;
 def freroll_loops : Flag<["-"], "freroll-loops">, Group<f_Group>,
   HelpText<"Turn on loop reroller">, Flags<[CC1Option]>;
 def fno_reroll_loops : Flag<["-"], "fno-reroll-loops">, Group<f_Group>,
