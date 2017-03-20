@@ -572,6 +572,9 @@ def dynamiclib : Flag<["-"], "dynamiclib">;
 def dynamic : Flag<["-"], "dynamic">, Flags<[NoArgumentUnused]>;
 def d_Flag : Flag<["-"], "d">, Group<d_Group>;
 def d_Joined : Joined<["-"], "d">, Group<d_Group>;
+def dump_tree_Joined : Joined<["-"], "fdump-tree">;
+def dump_rtl_Joined : Joined<["-"], "fdump-rtl">;
+def dump_ipa_Joined : Joined<["-"], "fdump-ipa">;
 def emit_ast : Flag<["-"], "emit-ast">,
   HelpText<"Emit Clang AST files for source inputs">;
 def emit_llvm : Flag<["-"], "emit-llvm">, Flags<[CC1Option]>, Group<Action_Group>,
