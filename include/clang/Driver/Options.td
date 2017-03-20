@@ -2555,7 +2555,7 @@ defm spec_constr_count : BooleanFFlag<"spec-constr-count">, Group<clang_ignored_
 defm stack_check : BooleanFFlag<"stack-check">, Group<clang_ignored_f_Group>;
 defm strength_reduce :
     BooleanFFlag<"strength-reduce">, Group<clang_ignored_gcc_optimization_f_Group>;
-defm tls_model : BooleanFFlag<"tls-model">, Group<clang_ignored_f_Group>;
+def tls_model_EQ : Joined<["-"], "tls-model=">,  Alias<ftlsmodel_EQ>;
 defm tracer : BooleanFFlag<"tracer">, Group<clang_ignored_gcc_optimization_f_Group>;
 defm tree_dce : BooleanFFlag<"tree-dce">, Group<clang_ignored_gcc_optimization_f_Group>;
 defm tree_loop_im : BooleanFFlag<"tree-loop-im">,  Group<clang_ignored_gcc_optimization_f_Group>;
