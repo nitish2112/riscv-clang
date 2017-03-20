@@ -2530,6 +2530,18 @@ def ira_no : Joined<["-"], "fno-ira">,
     Group<clang_ignored_gcc_optimization_f_Group>;
 defm dce : BooleanFFlag<"dce">, Group<clang_ignored_gcc_optimization_f_Group>;
 defm dse : BooleanFFlag<"dse">, Group<clang_ignored_gcc_optimization_f_Group>;
+def enable_ipa : Joined<["-"], "fenable-ipa-">,
+    Group<clang_ignored_gcc_optimization_f_Group>;
+def disable_ipa : Joined<["-"], "fdisable-ipa-">,
+    Group<clang_ignored_gcc_optimization_f_Group>;
+def enable_tree : Joined<["-"], "fenable-tree-">,
+    Group<clang_ignored_gcc_optimization_f_Group>;
+def disable_tree : Joined<["-"], "fdisable-tree-">,
+    Group<clang_ignored_gcc_optimization_f_Group>;
+def enable_rtl : Joined<["-"], "fenable-rtl-">,
+    Group<clang_ignored_gcc_optimization_f_Group>;
+def disable_rtl : Joined<["-"], "fdisable-rtl-">,
+    Group<clang_ignored_gcc_optimization_f_Group>;
 defm ivopts : BooleanFFlag<"ivopts">, Group<clang_ignored_gcc_optimization_f_Group>;
 defm non_call_exceptions : BooleanFFlag<"non-call-exceptions">, Group<clang_ignored_f_Group>;
 defm peel_loops : BooleanFFlag<"peel-loops">, Group<clang_ignored_gcc_optimization_f_Group>;
