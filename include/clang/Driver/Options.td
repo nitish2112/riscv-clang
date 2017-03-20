@@ -2508,6 +2508,22 @@ defm inline_small_functions : BooleanFFlag<"inline-small-functions">,
     Group<clang_ignored_gcc_optimization_f_Group>;
 defm ipa_cp : BooleanFFlag<"ipa-cp">,
     Group<clang_ignored_gcc_optimization_f_Group>;
+defm ipa_cp_alignment : BooleanFFlag<"ipa-cp-alignment">,
+    Group<clang_ignored_gcc_optimization_f_Group>;
+defm ipa_cp_clone : BooleanFFlag<"ipa-cp-clone">,
+    Group<clang_ignored_gcc_optimization_f_Group>;
+defm ipa_icf : BooleanFFlag<"ipa-icf">,
+    Group<clang_ignored_gcc_optimization_f_Group>;
+defm ipa_pta : BooleanFFlag<"ipa-pta">,
+    Group<clang_ignored_gcc_optimization_f_Group>;
+defm ipa_pure_const : BooleanFFlag<"ipa-pure-const">,
+    Group<clang_ignored_gcc_optimization_f_Group>;
+defm ipa_ra : BooleanFFlag<"ipa-ra">,
+    Group<clang_ignored_gcc_optimization_f_Group>;
+defm ipa_sra : BooleanFFlag<"ipa-sra">,
+    Group<clang_ignored_gcc_optimization_f_Group>;
+defm ipa_struct_reorg : BooleanFFlag<"ipa_sra">,
+    Group<clang_ignored_gcc_optimization_f_Group>;
 defm ivopts : BooleanFFlag<"ivopts">, Group<clang_ignored_gcc_optimization_f_Group>;
 defm non_call_exceptions : BooleanFFlag<"non-call-exceptions">, Group<clang_ignored_f_Group>;
 defm peel_loops : BooleanFFlag<"peel-loops">, Group<clang_ignored_gcc_optimization_f_Group>;
