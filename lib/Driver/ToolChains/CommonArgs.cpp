@@ -15,6 +15,7 @@
 #include "Arch/Mips.h"
 #include "Arch/PPC.h"
 #include "Arch/SystemZ.h"
+#include "Arch/RISCV.h"
 #include "Arch/X86.h"
 #include "clang/Basic/CharInfo.h"
 #include "clang/Basic/LangOptions.h"
@@ -330,6 +331,10 @@ std::string tools::getCPUName(const ArgList &Args, const llvm::Triple &T,
   case llvm::Triple::x86:
   case llvm::Triple::x86_64:
     return x86::getX86TargetCPU(Args, T);
+
+  case llvm::Triple::riscv32:
+  case llvm::Triple::riscv64:
+    return riscv::getRISCVTargetCPU(Args, T);
 
   case llvm::Triple::hexagon:
     return "hexagon" +
