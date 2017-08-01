@@ -8015,6 +8015,109 @@ const Builtin::Info Nios2TargetInfo::BuiltinInfo[] = {
 #include "clang/Basic/BuiltinsNios2.def"
 };
 
+class RISCVTargetInfo : public TargetInfo {
+  std::string CPU;
+  StringRef Arch;
+  bool IsRV32E;
+public:
+  RISCVTargetInfo(const llvm::Triple &Triple, const TargetOptions &Opts,
+                  unsigned TargetPointerWidth)
+       : TargetInfo(Triple) {
+    assert((TargetPointerWidth == 32 || TargetPointerWidth == 64) &&
+           "RISCV only supports 32- and 64-bit modes.");
+    IntWidth = IntAlign = 32;
+    LongLongWidth = LongLongAlign = 64;
+    FloatWidth = FloatAlign = 32;
+    DoubleWidth = DoubleAlign = 64;
+    DoubleFormat = &llvm::APFloat::IEEEdouble();
+    LongDoubleWidth = LongDoubleAlign = 64;
+    LongDoubleFormat = &llvm::APFloat::IEEEdouble();
+    MinGlobalAlign = 8;
+    MaxAtomicPromoteWidth = MaxAtomicInlineWidth = 32;
+
+    Arch = Triple.getArchName();
+    if(Arch.startswith("riscv32e"))
+      IsRV32E = true;
+    else
+      IsRV32E = false;
+
+    if (TargetPointerWidth == 64) {
+      resetDataLayout ("e-m:e-i64:64-n32:64-S128");
+      PointerWidth = PointerAlign = 64;
+      LongWidth = LongAlign = 64;
+    } else {
+      if (IsRV32E)
+        resetDataLayout ("e-m:e-p:32:32-i64:32-f64:32-n32-S32");
+      else
+        resetDataLayout ("e-m:e-p:32:32-i64:64-n32-S128");
+      PointerWidth = PointerAlign = 32;
+      LongWidth = LongAlign = 32;
+    }
+  }
+
+  bool setCPU(const std::string &Name) override {
+    CPU = Name;
+    bool CPUKnown = llvm::StringSwitch<bool>(Name)
+      .Case("generic-rv64", true)
+      .Case("generic-rv32", true)
+      .Case("rv32ema",  true)
+      .Case("rv32imac", true)
+      .Default(false);
+
+    return CPUKnown;
+  }
+
+  void getTargetDefines(const LangOptions &Opts,
+                        MacroBuilder &Builder) const override {
+    Builder.defineMacro("__riscv__");
+    Builder.defineMacro("__riscv");
+    Builder.defineMacro("__riscv_float_abi_soft");
+
+    if (PointerWidth == 64)
+      Builder.defineMacro("__riscv_xlen", "64");
+    else
+      Builder.defineMacro("__riscv_xlen", "32");
+
+    // Define NO_TRAMPOLINES to skip gcc relative test cases.
+    Builder.defineMacro("NO_TRAMPOLINES");
+  }
+
+  ArrayRef<Builtin::Info> getTargetBuiltins() const override { return None; }
+
+  BuiltinVaListKind getBuiltinVaListKind() const override {
+    return TargetInfo::VoidPtrBuiltinVaList;
+  }
+
+  const char *getClobbers() const override { return ""; }
+
+  ArrayRef<const char *> getGCCRegNames() const override {
+    static const char *const GCCRegNames[] = {
+        "x0",  "x1",  "x2",  "x3",  "x4",  "x5",  "x6",  "x7",
+        "x8",  "x9",  "x10", "x11", "x12", "x13", "x14", "x15",
+        "x16", "x17", "x18", "x19", "x20", "x21", "x22", "x23",
+        "x24", "x25", "x26", "x27", "x28", "x29", "x30", "x31"};
+    return llvm::makeArrayRef(GCCRegNames);
+  }
+
+  ArrayRef<TargetInfo::GCCRegAlias> getGCCRegAliases() const override {
+    static const TargetInfo::GCCRegAlias GCCRegAliases[] = {
+        {{"zero"}, "x0"}, {{"ra"}, "x1"},  {{"sp"}, "x2"},   {{"gp"}, "x3"},
+        {{"tp"}, "x4"},   {{"t0"}, "x5"},  {{"t1"}, "x6"},   {{"t2"}, "x7"},
+        {{"s0"}, "x8"},   {{"s1"}, "x9"},  {{"a0"}, "x10"},  {{"a1"}, "x11"},
+        {{"a2"}, "x12"},  {{"a3"}, "x13"}, {{"a4"}, "x15"},  {{"a5"}, "x15"},
+        {{"a6"}, "x16"},  {{"a7"}, "x17"}, {{"s2"}, "x18"},  {{"s3"}, "x19"},
+        {{"s4"}, "x20"},  {{"s5"}, "x21"}, {{"s6"}, "x22"},  {{"s7"}, "x23"},
+        {{"s8"}, "x24"},  {{"s9"}, "x25"}, {{"s10"}, "x26"}, {{"s11"}, "x27"},
+        {{"t3"}, "x28"},  {{"t4"}, "x29"}, {{"t5"}, "x30"},  {{"t6"}, "x31"}};
+    return llvm::makeArrayRef(GCCRegAliases);
+  }
+
+  bool validateAsmConstraint(const char *&Name,
+                             TargetInfo::ConstraintInfo &Info) const override {
+    return false;
+  }
+};
+
 class MipsTargetInfo : public TargetInfo {
   void setDataLayout() {
     StringRef Layout;
@@ -9736,6 +9839,11 @@ static TargetInfo *AllocateTarget(const llvm::Triple &Triple,
     default:
       return new PPC32TargetInfo(Triple, Opts);
     }
+
+  case llvm::Triple::riscv32:
+    return new RISCVTargetInfo(Triple, Opts, /*TargetPointerWidth=*/32);
+  case llvm::Triple::riscv64:
+    return new RISCVTargetInfo(Triple, Opts, /*TargetPointerWidth=*/64);
 
   case llvm::Triple::ppc64:
     if (Triple.isOSDarwin())
