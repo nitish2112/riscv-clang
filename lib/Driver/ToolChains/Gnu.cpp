@@ -1837,6 +1837,10 @@ bool Generic_GCC::GCCInstallationDetector::getBiarchSibling(Multilib &M) const {
       "i486-slackware-linux", "i686-montavista-linux", "i686-linux-android",
       "i586-linux-gnu"};
 
+  static const char *const RISCVLibDirs[] = {"/lib"};
+  static const char *const RISCVTriples[] = {
+      "riscv32-elf", "riscv64-elf"};
+
   static const char *const MIPSLibDirs[] = {"/lib"};
   static const char *const MIPSTriples[] = {"mips-linux-gnu", "mips-mti-linux",
                                             "mips-mti-linux-gnu",
@@ -1954,6 +1958,11 @@ bool Generic_GCC::GCCInstallationDetector::getBiarchSibling(Multilib &M) const {
       BiarchLibDirs.append(begin(X86_64LibDirs), end(X86_64LibDirs));
       BiarchTripleAliases.append(begin(X86_64Triples), end(X86_64Triples));
     }
+    break;
+  case llvm::Triple::riscv32:
+  case llvm::Triple::riscv64:
+    LibDirs.append(begin(RISCVLibDirs), end(RISCVLibDirs));
+    TripleAliases.append(begin(RISCVTriples), end(RISCVTriples));
     break;
   case llvm::Triple::mips:
     LibDirs.append(begin(MIPSLibDirs), end(MIPSLibDirs));
