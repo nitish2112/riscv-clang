@@ -2096,6 +2096,8 @@ def mips64r6 : Flag<["-"], "mips64r6">,
 def mfpxx : Flag<["-"], "mfpxx">, Group<m_Group>,
   HelpText<"Avoid FPU mode dependent operations when used with the O32 ABI">,
   Flags<[HelpHidden]>;
+def mriscv_EQ : Joined<["-"], "mriscv=">, Group<m_Group>,
+  HelpText<"Specify RISCV Extensions i.e. RV64IAM">;
 def modd_spreg : Flag<["-"], "modd-spreg">, Group<m_Group>,
   HelpText<"Enable odd single-precision floating point registers">,
   Flags<[HelpHidden]>;
