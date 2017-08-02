@@ -6533,6 +6533,303 @@ ABIArgInfo SystemZABIInfo::classifyArgumentType(QualType Ty) const {
 }
 
 //===----------------------------------------------------------------------===//
+// RISCV ABI Implementation
+//===----------------------------------------------------------------------===//
+
+namespace {
+class RISCVABIInfo : public ABIInfo {
+  bool IsRV32, IsRV32E;
+  unsigned MinABIStackAlignInBytes, StackAlignInBytes;
+public:
+  RISCVABIInfo(CodeGenTypes &CGT, bool _IsRV32) :
+    ABIInfo(CGT), IsRV32(_IsRV32), MinABIStackAlignInBytes(IsRV32 ? 4 : 8) {
+    const llvm::Triple &Triple = getTarget().getTriple();
+    if(Triple.getArchName().startswith("riscv32e")) {
+      StackAlignInBytes = 4;
+      IsRV32E = true;
+    } else {
+      StackAlignInBytes = 16;
+      IsRV32E = false;
+    }
+  }
+
+  void CoerceToIntArgs(uint64_t TySize,
+                       SmallVectorImpl<llvm::Type *> &ArgList) const;
+  llvm::Type* getPaddingType(uint64_t Align, uint64_t Offset) const;
+  llvm::Type* HandleAggregates(QualType Ty, uint64_t TySize) const;
+  ABIArgInfo classifyArgumentType(QualType RetTy, uint64_t &Offset,
+                                  bool isVariadic) const;
+  llvm::Type* returnAggregateInRegs(QualType RetTy, uint64_t Size) const;
+  ABIArgInfo classifyReturnType(QualType RetTy) const;
+  void computeInfo(CGFunctionInfo &FI) const override;
+  Address EmitVAArg(CodeGenFunction &CGF, Address VAListAddr,
+                    QualType Ty) const override;
+};
+
+class RISCVTargetCodeGenInfo : public TargetCodeGenInfo {
+public:
+  RISCVTargetCodeGenInfo(CodeGenTypes &CGT, bool _IsRV32)
+    : TargetCodeGenInfo(new RISCVABIInfo(CGT, _IsRV32)) {}
+};
+}
+
+void RISCVABIInfo::CoerceToIntArgs(
+    uint64_t TySize, SmallVectorImpl<llvm::Type *> &ArgList) const {
+  llvm::IntegerType *IntTy =
+    llvm::IntegerType::get(getVMContext(), MinABIStackAlignInBytes * 8);
+
+  // Add (TySize / MinABIStackAlignInBytes) args of IntTy.
+  for (unsigned N = TySize / (MinABIStackAlignInBytes * 8); N; --N)
+    ArgList.push_back(IntTy);
+
+  // If necessary, add one more integer type to ArgList.
+  unsigned R = TySize % (MinABIStackAlignInBytes * 8);
+
+  if (R)
+    ArgList.push_back(llvm::IntegerType::get(getVMContext(), R));
+}
+
+llvm::Type *RISCVABIInfo::getPaddingType(uint64_t OrigOffset,
+                                         uint64_t Offset) const {
+  if (OrigOffset + MinABIStackAlignInBytes > Offset)
+    return nullptr;
+
+  return llvm::IntegerType::get(getVMContext(), (Offset - OrigOffset) * 8);
+}
+
+// In RV32/64, an aligned double precision floating point field is passed in
+// a register.
+llvm::Type* RISCVABIInfo::HandleAggregates(QualType Ty, uint64_t TySize) const {
+  SmallVector<llvm::Type*, 8> ArgList, IntArgList;
+
+  if (IsRV32) {
+    CoerceToIntArgs(TySize, ArgList);
+    return llvm::StructType::get(getVMContext(), ArgList);
+  }
+
+  const RecordType *RT = Ty->getAs<RecordType>();
+
+  // Unions/vectors are passed in integer registers.
+  if (!RT || !RT->isStructureOrClassType()) {
+    CoerceToIntArgs(TySize, ArgList);
+    return llvm::StructType::get(getVMContext(), ArgList);
+  }
+
+  const RecordDecl *RD = RT->getDecl();
+  const ASTRecordLayout &Layout = getContext().getASTRecordLayout(RD);
+  assert(!(TySize % 8) && "Size of structure must be multiple of 8.");
+
+  uint64_t LastOffset = 0;
+  unsigned idx = 0;
+  llvm::IntegerType *I64 = llvm::IntegerType::get(getVMContext(), 64);
+
+  // Iterate over fields in the struct/class and check if there are any aligned
+  // double fields.
+  for (RecordDecl::field_iterator i = RD->field_begin(), e = RD->field_end();
+       i != e; ++i, ++idx) {
+    const QualType Ty = i->getType();
+    const BuiltinType *BT = Ty->getAs<BuiltinType>();
+
+    if (!BT || BT->getKind() != BuiltinType::Double)
+      continue;
+
+    uint64_t Offset = Layout.getFieldOffset(idx);
+    if (Offset % 64) // Ignore doubles that are not aligned.
+      continue;
+
+    // Add ((Offset - LastOffset) / 64) args of type i64.
+    for (unsigned j = (Offset - LastOffset) / 64; j > 0; --j)
+      ArgList.push_back(I64);
+
+    // Add double type.
+    ArgList.push_back(llvm::Type::getDoubleTy(getVMContext()));
+    LastOffset = Offset + 64;
+  }
+
+  CoerceToIntArgs(TySize - LastOffset, IntArgList);
+  ArgList.append(IntArgList.begin(), IntArgList.end());
+
+  return llvm::StructType::get(getVMContext(), ArgList);
+}
+
+ABIArgInfo RISCVABIInfo::classifyArgumentType(QualType Ty, uint64_t &Offset,
+                                              bool isVariadic) const {
+  Ty = useFirstFieldIfTransparentUnion(Ty);
+
+  uint64_t OrigOffset = Offset;
+  uint64_t TySize = getContext().getTypeSize(Ty);
+  uint64_t Align = getContext().getTypeAlign(Ty) / 8;
+
+  Align = std::min(std::max(Align, (uint64_t)MinABIStackAlignInBytes),
+                   (uint64_t)StackAlignInBytes);
+  unsigned CurrOffset = llvm::alignTo(Offset, Align);
+  Offset = CurrOffset + llvm::alignTo(TySize, Align * 8) / 8;
+
+  if (isAggregateTypeForABI(Ty) || Ty->isVectorType()) {
+    // Ignore empty aggregates.
+    if (TySize == 0)
+      return ABIArgInfo::getIgnore();
+
+    // Records with non-trivial destructors/copy-constructors should not be
+    // passed by value.
+    if (CGCXXABI::RecordArgABI RAA = getRecordArgABI(Ty, getCXXABI()))
+      return getNaturalAlignIndirect(Ty, RAA == CGCXXABI::RAA_DirectInMemory);
+
+    // Values that are not less than two words are passed by referenced.
+    uint64_t TwoWord = IsRV32 ? 64 : 128;
+    if (TySize > TwoWord)
+      return getNaturalAlignIndirect(Ty, false);
+
+    // We don't have to coerce if the structure is single element
+    // and it's not variable argument.
+    if (isSingleElementStruct (Ty, getContext()) && !isVariadic)
+      return ABIArgInfo::getDirect();
+
+    // If we have reached here, aggregates are passed directly by coercing to
+    // another structure type. Padding is inserted if the offset of the
+    // aggregate is unaligned.
+    ABIArgInfo ArgInfo =
+      ABIArgInfo::getDirect(HandleAggregates(Ty, TySize), 0,
+                              getPaddingType(OrigOffset, CurrOffset));
+    ArgInfo.setInReg(true);
+    return ArgInfo;
+  }
+
+  // Treat an enum type as its underlying type.
+  if (const EnumType *EnumTy = Ty->getAs<EnumType>())
+    Ty = EnumTy->getDecl()->getIntegerType();
+
+  // All integral types are promoted to the GPR width.
+  if (Ty->isIntegralOrEnumerationType())
+    return ABIArgInfo::getExtend();
+
+  return ABIArgInfo::getDirect();
+}
+
+llvm::Type*
+RISCVABIInfo::returnAggregateInRegs(QualType RetTy, uint64_t Size) const {
+  const RecordType *RT = RetTy->getAs<RecordType>();
+  SmallVector<llvm::Type*, 8> RTList;
+
+  if (RT && RT->isStructureOrClassType()) {
+    const RecordDecl *RD = RT->getDecl();
+    const ASTRecordLayout &Layout = getContext().getASTRecordLayout(RD);
+    unsigned FieldCnt = Layout.getFieldCount();
+
+    if (FieldCnt && (FieldCnt <= 2) && !Layout.getFieldOffset(0)) {
+      RecordDecl::field_iterator b = RD->field_begin(), e = RD->field_end();
+      for (; b != e; ++b) {
+        const BuiltinType *BT = b->getType()->getAs<BuiltinType>();
+
+        if (!BT || !BT->isFloatingPoint())
+          break;
+
+        RTList.push_back(CGT.ConvertType(b->getType()));
+      }
+
+      if (b == e)
+        return llvm::StructType::get(getVMContext(), RTList,
+                                     RD->hasAttr<PackedAttr>());
+
+      RTList.clear();
+    }
+  }
+
+  CoerceToIntArgs(Size, RTList);
+  return llvm::StructType::get(getVMContext(), RTList);
+}
+
+ABIArgInfo RISCVABIInfo::classifyReturnType(QualType RetTy) const {
+  if (RetTy->isVoidType())
+    return ABIArgInfo::getIgnore();
+
+  uint64_t Size = getContext().getTypeSize(RetTy);
+  uint64_t ReturnSize = IsRV32 ? 64 : 128;
+
+  if (Size == 0)
+    return ABIArgInfo::getIgnore();
+
+  // RISCV only have 2 register to return value
+  // So push to stack if the element number > 2
+  if (RetTy->isVectorType()) {
+    const VectorType *VT = RetTy->getAs<VectorType>();
+
+    if (VT->getNumElements() > 2)
+      return getNaturalAlignIndirect(RetTy);
+  }
+
+  // Large vector types should be returned via memory.
+  if (RetTy->isVectorType() && getContext().getTypeSize(RetTy) > ReturnSize) {
+    return getNaturalAlignIndirect(RetTy);
+  }
+
+  if (isAggregateTypeForABI(RetTy) || RetTy->isVectorType()) {
+    if (Size <= ReturnSize) {
+      if (RetTy->isAnyComplexType())
+        return ABIArgInfo::getDirect();
+
+      if (!IsRV32) {
+        ABIArgInfo ArgInfo =
+            ABIArgInfo::getDirect(returnAggregateInRegs(RetTy, Size));
+        ArgInfo.setInReg(true);
+        return ArgInfo;
+      }
+    }
+  }
+
+  if (isAggregateTypeForABI(RetTy)) {
+    if (Size <= ReturnSize) {
+      return ABIArgInfo::getDirect(llvm::IntegerType::get(getVMContext(),
+                                   Size));
+    } else {
+      // return indirectly via a pointer.
+      return getNaturalAlignIndirect(RetTy);
+    }
+  }
+  // Treat an enum type as its underlying type.
+  if (const EnumType *EnumTy = RetTy->getAs<EnumType>())
+    RetTy = EnumTy->getDecl()->getIntegerType();
+
+  return (RetTy->isPromotableIntegerType() ?
+          ABIArgInfo::getExtend() : ABIArgInfo::getDirect());
+}
+
+void RISCVABIInfo::computeInfo(CGFunctionInfo &FI) const {
+  ABIArgInfo &RetInfo = FI.getReturnInfo();
+  if (!getCXXABI().classifyReturnType(FI))
+    RetInfo = classifyReturnType(FI.getReturnType());
+
+  // Check if a pointer to an aggregate is passed as a hidden argument.
+  uint64_t Offset = RetInfo.isIndirect() ? MinABIStackAlignInBytes : 0;
+
+  for (auto &I : FI.arguments())
+    I.info = classifyArgumentType(I.type, Offset, FI.isVariadic());
+}
+
+Address RISCVABIInfo::EmitVAArg(CodeGenFunction &CGF, Address VAListAddr,
+                               QualType Ty) const {
+  CharUnits SlotSize = CharUnits::fromQuantity(IsRV32 ? 4: 8);
+
+  // Empty records are ignored for parameter passing purposes.
+  if (isEmptyRecord(getContext(), Ty, true)) {
+    Address Addr(CGF.Builder.CreateLoad(VAListAddr), SlotSize);
+    Addr = CGF.Builder.CreateElementBitCast(Addr, CGF.ConvertTypeForMem(Ty));
+    return Addr;
+  }
+
+  uint64_t Offset;
+  ABIArgInfo AI = classifyArgumentType (Ty, Offset, true);
+
+  if (AI.isIndirect())
+    return EmitVAArgInstr(CGF, VAListAddr, Ty, AI);
+
+  auto TyInfo = getContext().getTypeInfoInChars(Ty);
+
+  return emitVoidPtrVAArg(CGF, VAListAddr, Ty, false, TyInfo,
+                          SlotSize, /*AllowHigherAlign*/ !IsRV32E);
+}
+
+//===----------------------------------------------------------------------===//
 // MSP430 ABI Implementation
 //===----------------------------------------------------------------------===//
 
@@ -8514,6 +8811,11 @@ const TargetCodeGenInfo &CodeGenModule::getTargetCodeGenInfo() {
   case llvm::Triple::wasm32:
   case llvm::Triple::wasm64:
     return SetCGInfo(new WebAssemblyTargetCodeGenInfo(Types));
+
+  case llvm::Triple::riscv32:
+    return SetCGInfo(new RISCVTargetCodeGenInfo(Types, true));
+  case llvm::Triple::riscv64:
+    return SetCGInfo(new RISCVTargetCodeGenInfo(Types, false));
 
   case llvm::Triple::arm:
   case llvm::Triple::armeb:
