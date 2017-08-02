@@ -2615,6 +2615,19 @@ defm devirtualize : BooleanFFlag<"devirtualize">, Group<clang_ignored_gcc_optimi
 defm devirtualize_speculatively : BooleanFFlag<"devirtualize-speculatively">,
     Group<clang_ignored_gcc_optimization_f_Group>;
 
+def fstack_check_EQ : Joined<["-"], "fstack-check=">, Group<clang_ignored_f_Group>;
+defm floop_parallelize_all : BooleanFFlag<"loop-parallelize-all">, Group<clang_ignored_f_Group>;
+defm floop_interchange : BooleanFFlag<"loop-interchange">, Group<clang_ignored_f_Group>;
+defm floop_block : BooleanFFlag<"loop-block">, Group<clang_ignored_f_Group>;
+defm floop_strip_mine : BooleanFFlag<"loop-strip-mine">, Group<clang_ignored_f_Group>;
+defm floop_nest_optimize : BooleanFFlag<"loop-nest-optimize">, Group<clang_ignored_f_Group>;
+defm fgraphite_identity : BooleanFFlag<"graphite-identity">, Group<clang_ignored_f_Group>;
+defm fdump_ada_spec : BooleanFFlag<"dump-ada-spec">, Group<clang_ignored_f_Group>;
+defm ftree_loop_if_convert : BooleanFFlag<"tree-loop-if-convert">, Group<clang_ignored_f_Group>;
+defm fno_tree_dse : BooleanFFlag<"no-tree-dse">, Group<clang_ignored_f_Group>;
+defm fipa_struct_reorg : BooleanFFlag<"ipa-struct-reorg">, Group<clang_ignored_f_Group>;
+defm fno_tree_ch : BooleanFFlag<"no-tree-ch">, Group<clang_ignored_f_Group>;
+defm fdump_noaddr : BooleanFFlag<"dump-noaddr">, Group<clang_ignored_f_Group>;
 defm fallow_parameterless_variadic_functions : BooleanFFlag<"allow-parameterless-variadic-functions">, Group<clang_ignored_f_Group>;
 defm fcheck_pointer_bounds : BooleanFFlag<"check-pointer-bounds">, Group<clang_ignored_f_Group>;
 defm fchecking : BooleanFFlag<"checking">, Group<clang_ignored_f_Group>;
