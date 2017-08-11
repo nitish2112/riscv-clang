@@ -8062,6 +8062,7 @@ public:
       .Case("generic-rv32", true)
       .Case("rv32ema",  true)
       .Case("rv32imac", true)
+      .Case("rv64imac", true)
       .Default(false);
 
     return CPUKnown;
