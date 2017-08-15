@@ -113,13 +113,13 @@ void RISCV::Linker::ConstructJob(Compilation &C, const JobAction &JA,
 
       CmdArgs.push_back("-lc");
 
-        CmdArgs.push_back("-lgloss");
+      CmdArgs.push_back("-lgloss");
 
-//      Default static linking.
-//	We may need to add AddRunTimeLibs when we support dynamic linking.
-//
-        CmdArgs.push_back("--end-group");
-        CmdArgs.push_back("-lgcc");
+      // Default static linking.
+      // We may need to add AddRunTimeLibs when we support dynamic linking.
+      //
+      CmdArgs.push_back("--end-group");
+      CmdArgs.push_back("-lgcc");
 
       // Add IAMCU specific libs (outside the group), if needed.
       if (IsIAMCU) {
