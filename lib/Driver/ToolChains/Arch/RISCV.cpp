@@ -36,6 +36,9 @@ const char *riscv::getRISCVTargetCPU(const ArgList &Args,
   if (MArch.startswith("riscv32ema"))
     return "rv32ema";
 
+  if (MArch.startswith("riscv32emac"))
+    return "rv32emac";
+
   if (MArch.startswith("riscv32imac"))
     return "rv32imac";
 
