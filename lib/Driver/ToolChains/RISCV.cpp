@@ -119,7 +119,10 @@ void RISCV::Linker::ConstructJob(Compilation &C, const JobAction &JA,
       // We may need to add AddRunTimeLibs when we support dynamic linking.
       //
       CmdArgs.push_back("--end-group");
-      CmdArgs.push_back("-lgcc");
+      if (ToolChain.GetRuntimeLibType(Args) == ToolChain::RLT_Libgcc)
+        CmdArgs.push_back("-lgcc");
+      else
+        CmdArgs.push_back(ToolChain.getCompilerRTArgString(Args, "builtins"));
 
       // Add IAMCU specific libs (outside the group), if needed.
       if (IsIAMCU) {
