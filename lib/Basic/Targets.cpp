@@ -8030,8 +8030,8 @@ public:
     FloatWidth = FloatAlign = 32;
     DoubleWidth = DoubleAlign = 64;
     DoubleFormat = &llvm::APFloat::IEEEdouble();
-    LongDoubleWidth = LongDoubleAlign = 64;
-    LongDoubleFormat = &llvm::APFloat::IEEEdouble();
+    LongDoubleWidth = LongDoubleAlign = 128;
+    LongDoubleFormat = &llvm::APFloat::IEEEquad();
     MinGlobalAlign = 8;
     MaxAtomicPromoteWidth = MaxAtomicInlineWidth = 32;
 
