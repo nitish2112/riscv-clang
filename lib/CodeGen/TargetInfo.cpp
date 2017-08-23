@@ -6665,6 +6665,11 @@ ABIArgInfo RISCVABIInfo::classifyArgumentType(QualType Ty, uint64_t &Offset,
   unsigned CurrOffset = llvm::alignTo(Offset, Align);
   Offset = CurrOffset + llvm::alignTo(TySize, Align * 8) / 8;
 
+  // Values that are not less than two words are passed by referenced.
+  uint64_t TwoWord = IsRV32 ? 64 : 128;
+  if (TySize > TwoWord)
+    return getNaturalAlignIndirect(Ty, false);
+
   if (isAggregateTypeForABI(Ty) || Ty->isVectorType()) {
     // Ignore empty aggregates.
     if (TySize == 0)
@@ -6674,11 +6679,6 @@ ABIArgInfo RISCVABIInfo::classifyArgumentType(QualType Ty, uint64_t &Offset,
     // passed by value.
     if (CGCXXABI::RecordArgABI RAA = getRecordArgABI(Ty, getCXXABI()))
       return getNaturalAlignIndirect(Ty, RAA == CGCXXABI::RAA_DirectInMemory);
-
-    // Values that are not less than two words are passed by referenced.
-    uint64_t TwoWord = IsRV32 ? 64 : 128;
-    if (TySize > TwoWord)
-      return getNaturalAlignIndirect(Ty, false);
 
     // We don't have to coerce if the structure is single element
     // and it's not variable argument.
