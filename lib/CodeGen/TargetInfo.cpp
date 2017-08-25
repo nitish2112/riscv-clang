@@ -6656,17 +6656,33 @@ ABIArgInfo RISCVABIInfo::classifyArgumentType(QualType Ty, uint64_t &Offset,
                                               bool isVariadic) const {
   Ty = useFirstFieldIfTransparentUnion(Ty);
 
+  unsigned CurrOffset;
   uint64_t OrigOffset = Offset;
   uint64_t TySize = getContext().getTypeSize(Ty);
   uint64_t Align = getContext().getTypeAlign(Ty) / 8;
+  uint64_t TwoWord = IsRV32 ? 64 : 128;
 
   Align = std::min(std::max(Align, (uint64_t)MinABIStackAlignInBytes),
                    (uint64_t)StackAlignInBytes);
-  unsigned CurrOffset = llvm::alignTo(Offset, Align);
-  Offset = CurrOffset + llvm::alignTo(TySize, Align * 8) / 8;
+
+  // The argument will pass by reference if TySize > 2xXLEN,
+  // so the new Offset should increment by the pointer size with it's alignment.
+  // Argument Offset will influence padding.
+  // E.g. vaarg(f128, i64) in rv32
+  //      According to rv32 ABI, f128 will pass by reference,
+  //      and vaarg have to padding one register for i64 in this case.
+  //      Therefore, the parameters should pass by a0, a2, a3.
+  //      a1 register padding will missing if Offset calculate incorrectly.
+  if (TySize > TwoWord) {
+    CurrOffset = llvm::alignTo(Offset, (uint64_t)MinABIStackAlignInBytes);
+    Offset = CurrOffset + llvm::alignTo((uint64_t)MinABIStackAlignInBytes,
+	                                (uint64_t)MinABIStackAlignInBytes* 8) / 8;
+  } else {
+    CurrOffset = llvm::alignTo(Offset, Align);
+    Offset = CurrOffset + llvm::alignTo(TySize, Align * 8) / 8;
+  }
 
   // Values that are not less than two words are passed by referenced.
-  uint64_t TwoWord = IsRV32 ? 64 : 128;
   if (TySize > TwoWord)
     return getNaturalAlignIndirect(Ty, false);
 
