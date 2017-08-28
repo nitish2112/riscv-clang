@@ -8032,6 +8032,7 @@ public:
     DoubleFormat = &llvm::APFloat::IEEEdouble();
     LongDoubleWidth = LongDoubleAlign = 128;
     LongDoubleFormat = &llvm::APFloat::IEEEquad();
+    HasFloat128 = true;
     MinGlobalAlign = 8;
     MaxAtomicPromoteWidth = MaxAtomicInlineWidth = 32;
 
