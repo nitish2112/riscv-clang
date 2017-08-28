@@ -8034,7 +8034,6 @@ public:
     LongDoubleFormat = &llvm::APFloat::IEEEquad();
     HasFloat128 = true;
     MinGlobalAlign = 8;
-    MaxAtomicPromoteWidth = MaxAtomicInlineWidth = 32;
 
     Arch = Triple.getArchName();
     if(Arch.startswith("riscv32e"))
@@ -8046,6 +8045,7 @@ public:
       resetDataLayout ("e-m:e-i64:64-n32:64-S128");
       PointerWidth = PointerAlign = 64;
       LongWidth = LongAlign = 64;
+      MaxAtomicPromoteWidth = MaxAtomicInlineWidth = 64;
     } else {
       if (IsRV32E)
         resetDataLayout ("e-m:e-p:32:32-i64:32-f64:32-n32-S32");
@@ -8053,6 +8053,7 @@ public:
         resetDataLayout ("e-m:e-p:32:32-i64:64-n32-S128");
       PointerWidth = PointerAlign = 32;
       LongWidth = LongAlign = 32;
+      MaxAtomicPromoteWidth = MaxAtomicInlineWidth = 32;
     }
   }
 
