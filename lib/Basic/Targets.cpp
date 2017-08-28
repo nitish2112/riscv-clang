@@ -8080,6 +8080,9 @@ public:
     else
       Builder.defineMacro("__riscv_xlen", "32");
 
+    if (IsRV32E)
+      Builder.defineMacro("__riscv_32e");
+
     // Define NO_TRAMPOLINES to skip gcc relative test cases.
     Builder.defineMacro("NO_TRAMPOLINES");
   }
