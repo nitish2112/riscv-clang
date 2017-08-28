@@ -8083,6 +8083,8 @@ public:
     if (IsRV32E)
       Builder.defineMacro("__riscv_32e");
 
+    Builder.defineMacro("__riscv_cmodel_medlow");
+
     // Define NO_TRAMPOLINES to skip gcc relative test cases.
     Builder.defineMacro("NO_TRAMPOLINES");
   }
