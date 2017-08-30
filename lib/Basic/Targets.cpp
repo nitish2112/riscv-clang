@@ -8090,7 +8090,6 @@ public:
     return TargetInfo::VoidPtrBuiltinVaList;
   }
 
-  bool hasInt128Type() const override { return true; }
   const char *getClobbers() const override { return ""; }
 
   ArrayRef<const char *> getGCCRegNames() const override {
