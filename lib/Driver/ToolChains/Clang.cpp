@@ -15,6 +15,7 @@
 #include "Arch/Sparc.h"
 #include "Arch/SystemZ.h"
 #include "Arch/X86.h"
+#include "Arch/RISCV.h"
 #include "CommonArgs.h"
 #include "Hexagon.h"
 #include "InputInfo.h"
@@ -363,6 +364,10 @@ static void getTargetFeatures(const ToolChain &TC, const llvm::Triple &Triple,
   case llvm::Triple::r600:
   case llvm::Triple::amdgcn:
     getAMDGPUTargetFeatures(D, Args, Features);
+    break;
+  case llvm::Triple::riscv32:
+  case llvm::Triple::riscv64:
+    riscv::getRISCVTargetFeatures(D, Args, Triple, Features);
     break;
   }
 
@@ -1646,54 +1651,8 @@ void Clang::AddLanaiTargetArgs(const ArgList &Args,
   }
 }
 
-static void parseRISCVExtensions(StringRef exts, ArgStringList &CmdArgs) {
-  for(size_t i = 0, e = exts.size(); i < e; i++){
-    char C = exts[i];
-    if(C == 'm') {
-      CmdArgs.push_back("-target-feature");
-      CmdArgs.push_back("+m");
-    } else if(C == 'a') {
-      CmdArgs.push_back("-target-feature");
-      CmdArgs.push_back("+a");
-    } else if(C == 'f') {
-      CmdArgs.push_back("-target-feature");
-      CmdArgs.push_back("+f");
-    } else if(C == 'e') {
-      CmdArgs.push_back("-target-feature");
-      CmdArgs.push_back("+e");
-    } else if(C == 'c') {
-      CmdArgs.push_back("-target-feature");
-      CmdArgs.push_back("+c");
-    } else if(C == 'd') {
-      CmdArgs.push_back("-target-feature");
-      CmdArgs.push_back("+d");
-    }
-  }
-}
-
 void Clang::AddRISCVTargetArgs(const ArgList &Args,
                                ArgStringList &CmdArgs) const {
-  StringRef MArch;
-  if (Arg *A = Args.getLastArg(options::OPT_mriscv_EQ)) {
-    // Otherwise, if we have -march= choose the base CPU for that arch.
-    MArch = A->getValue();
-  } else {
-    // Otherwise, use the Arch from the triple.
-    llvm::Triple Triple = getToolChain().getTriple();
-    MArch = Triple.getArchName();
-  }
-
-  if(MArch.startswith("riscv32")) {
-    CmdArgs.push_back("-target-feature");
-    CmdArgs.push_back("+rv32");
-    CmdArgs.push_back("-target-feature");
-    CmdArgs.push_back("-rv64");
-    parseRISCVExtensions(MArch.drop_front(4), CmdArgs);
-  }else if(MArch.startswith("riscv64")) {
-    CmdArgs.push_back("-target-feature");
-    CmdArgs.push_back("+rv64");
-    parseRISCVExtensions(MArch.drop_front(4), CmdArgs);
-  }
 }
 
 void Clang::AddWebAssemblyTargetArgs(const ArgList &Args,

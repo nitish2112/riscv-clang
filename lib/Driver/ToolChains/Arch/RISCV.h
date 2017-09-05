@@ -21,6 +21,10 @@ namespace driver {
 namespace tools {
 namespace riscv {
 
+void getRISCVTargetFeatures(const Driver &D, const llvm::opt::ArgList &Args,
+                            const llvm::Triple &Triple,
+                            std::vector<llvm::StringRef> &Features);
+
 const char *getRISCVTargetCPU(const llvm::opt::ArgList &Args,
                               const llvm::Triple &Triple);
 
