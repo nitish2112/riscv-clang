@@ -24,8 +24,7 @@ const char *riscv::getRISCVTargetCPU(const ArgList &Args,
                                      const llvm::Triple &Triple) {
   StringRef MArch;
 
-  if (Arg *A = Args.getLastArg(options::OPT_mriscv_EQ)) {
-    // Otherwise, if we have -march= choose the base CPU for that arch.
+  if (const Arg *A = Args.getLastArg(clang::driver::options::OPT_mcpu_EQ)) {
     MArch = A->getValue();
   } else {
     // Otherwise, use the Arch from the triple.
@@ -60,55 +59,46 @@ const char *riscv::getRISCVTargetCPU(const ArgList &Args,
 void riscv::getRISCVTargetFeatures(const Driver &D, const ArgList &Args,
                                    const llvm::Triple &Triple,
                                    std::vector<StringRef> &Features) {
-  StringRef MArch;
+  StringRef MArch, Ext;
 
-  if (Arg *A = Args.getLastArg(options::OPT_march_EQ)) {
+  if (const Arg *A = Args.getLastArg(options::OPT_march_EQ)) {
     MArch = A->getValue();
+    Ext = MArch.substr(4);
+    if (MArch.startswith("rv32")) {
+      Features.push_back("+rv32");
+    } else if (MArch.startswith("rv64")) {
+      Features.push_back("+rv64");
+    } else {
+      D.Diag(diag::err_drv_invalid_arch_name) << MArch;
+    }
   } else {
     // Otherwise, use the Arch from the triple.
     MArch = Triple.getArchName();
-    if (MArch.startswith("riscv32e")) {
-      Features.push_back("+e");
+    Ext = MArch.substr(7);
+    if (MArch.startswith("riscv32")) {
       Features.push_back("+rv32");
-    } else if (MArch.startswith("riscv32")) {
-      Features.push_back("+rv32");
-      Features.push_back("+m");
-      Features.push_back("+a");
     } else if (MArch.startswith("riscv64")) {
       Features.push_back("+rv64");
-      Features.push_back("+m");
-      Features.push_back("+a");
     } else {
-      // ????
       D.Diag(diag::err_drv_invalid_arch_name) << MArch;
     }
-    return;
   }
 
   bool hasF = false, hasD = false, hasE = false;
 
-  if (MArch.startswith("rv32e")) {
-    Features.push_back("+e");
-    Features.push_back("+rv32");
-    Features.push_back("-rv64");
-    hasE = true;
-  } else if (MArch.startswith("rv32i")) {
-    Features.push_back("+rv32");
-    Features.push_back("-rv64");
-  } else if (MArch.startswith("rv64i")) {
-    Features.push_back("+rv64");
-    Features.push_back("-rv32");
-  } else {
-    D.Diag(diag::err_drv_invalid_arch_name) << MArch;
-  }
-
-  for (auto ext : MArch.substr(5)) {
+  for (auto ext : Ext) {
     switch (ext) {
+    case 'i':
+      break;
     case 'm':
       Features.push_back("+m");
       break;
     case 'a':
       Features.push_back("+a");
+      break;
+    case 'e':
+      Features.push_back("+e");
+      hasE = true;
       break;
     case 'f':
       Features.push_back("+f");
