@@ -1839,7 +1839,8 @@ bool Generic_GCC::GCCInstallationDetector::getBiarchSibling(Multilib &M) const {
 
   static const char *const RISCVLibDirs[] = {"/lib"};
   static const char *const RISCVTriples[] = {
-      "riscv32-elf", "riscv64-elf"};
+      "riscv32-elf", "riscv64-elf",
+      "riscv32-unknown-elf", "riscv64-unknown-elf"};
 
   static const char *const MIPSLibDirs[] = {"/lib"};
   static const char *const MIPSTriples[] = {"mips-linux-gnu", "mips-mti-linux",
