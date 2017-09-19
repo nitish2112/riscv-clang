@@ -141,4 +141,44 @@ void RISCV::Linker::ConstructJob(Compilation &C, const JobAction &JA,
   C.addCommand(llvm::make_unique<Command>(JA, *this, Args.MakeArgString(Linker),
                                           CmdArgs, Inputs));
 }
+
+void RISCVToolChain::addLibStdCxxIncludePaths(const llvm::opt::ArgList &DriverArgs,
+                                              llvm::opt::ArgStringList &CC1Args) const {
+  // We need a detected GCC installation to provide libstdc++'s headers.
+  if (!GCCInstallation.isValid())
+    return;
+
+  // By default, look for the C++ headers in an include directory adjacent to
+  // the lib directory of the GCC installation. Note that this is expect to be
+  // equivalent to '/usr/include/c++/X.Y' in almost all cases.
+  StringRef LibDir = GCCInstallation.getParentLibPath();
+  StringRef InstallDir = GCCInstallation.getInstallPath();
+  StringRef TripleStr = GCCInstallation.getTriple().str();
+  const Multilib &Multilib = GCCInstallation.getMultilib();
+  const GCCVersion &Version = GCCInstallation.getVersion();
+
+  // Otherwise, fall back on a bunch of options which don't use multiarch
+  // layouts for simplicity.
+  const std::string LibStdCXXIncludePathCandidates[] = {
+      // Gentoo is weird and places its headers inside the GCC install,
+      // so if the first attempt to find the headers fails, try these patterns.
+      InstallDir.str() + "/include/g++-v" + Version.Text,
+      InstallDir.str() + "/include/g++-v" + Version.MajorStr + "." +
+          Version.MinorStr,
+      InstallDir.str() + "/include/g++-v" + Version.MajorStr,
+      // Android standalone toolchain has C++ headers in yet another place.
+      LibDir.str() + "/../" + TripleStr.str() + "/include/c++/" + Version.Text,
+      // Freescale SDK C++ headers are directly in <sysroot>/usr/include/c++,
+      // without a subdirectory corresponding to the gcc version.
+      LibDir.str() + "/../include/c++",
+  };
+
+  for (const auto &IncludePath : LibStdCXXIncludePathCandidates) {
+    if (addLibStdCXXIncludePaths(IncludePath, /*Suffix*/ "", TripleStr,
+                                 /*GCCMultiarchTriple*/ "",
+                                 /*TargetMultiarchTriple*/ "",
+                                 Multilib.includeSuffix(), DriverArgs, CC1Args))
+      break;
+  }
+}
 // RISCV tools end.

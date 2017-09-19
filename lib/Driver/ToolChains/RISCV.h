@@ -27,6 +27,10 @@ public:
   RISCVToolChain(const Driver &D, const llvm::Triple &Triple,
                  const llvm::opt::ArgList &Args);
   bool IsIntegratedAssemblerDefault() const override { return true; }
+
+  void addLibStdCxxIncludePaths(
+      const llvm::opt::ArgList &DriverArgs,
+      llvm::opt::ArgStringList &CC1Args) const override;
 };
 
 } // end namespace toolchains
