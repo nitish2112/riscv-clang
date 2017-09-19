@@ -863,6 +863,16 @@ void tools::gnutools::Assembler::ConstructJob(Compilation &C,
     CmdArgs.push_back(Args.MakeArgString("-march=" + CPUName));
     break;
   }
+  case llvm::Triple::riscv32: {
+    CmdArgs.push_back(Args.MakeArgString("-mabi=ilp32"));
+    Args.AddLastArg(CmdArgs, options::OPT_march_EQ);
+    break;
+  }
+  case llvm::Triple::riscv64: {
+    CmdArgs.push_back(Args.MakeArgString("-mabi=lp64"));
+    Args.AddLastArg(CmdArgs, options::OPT_march_EQ);
+    break;
+  }
   }
 
   Args.AddAllArgs(CmdArgs, options::OPT_I);
