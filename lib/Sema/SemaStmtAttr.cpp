@@ -11,6 +11,8 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include <stdio.h>
+
 #include "clang/Sema/SemaInternal.h"
 #include "clang/AST/ASTContext.h"
 #include "clang/Basic/SourceManager.h"
@@ -85,6 +87,8 @@ static Attr *handleLoopHintAttr(Sema &S, Stmt *St, const AttributeList &A,
   IdentifierLoc *StateLoc = A.getArgAsIdent(2);
   Expr *ValueExpr = A.getArgAsExpr(3);
 
+  // nitish: add support for unordered_for
+  bool PragmaUnorderedFor = PragmaNameLoc->Ident->getName() == "unordered_for";
   bool PragmaUnroll = PragmaNameLoc->Ident->getName() == "unroll";
   bool PragmaNoUnroll = PragmaNameLoc->Ident->getName() == "nounroll";
   if (St->getStmtClass() != Stmt::DoStmtClass &&
@@ -95,6 +99,7 @@ static Attr *handleLoopHintAttr(Sema &S, Stmt *St, const AttributeList &A,
         llvm::StringSwitch<const char *>(PragmaNameLoc->Ident->getName())
             .Case("unroll", "#pragma unroll")
             .Case("nounroll", "#pragma nounroll")
+            .Case("unordered_for", "#pragma unordered_for")
             .Default("#pragma clang loop");
     S.Diag(St->getLocStart(), diag::err_pragma_loop_precedes_nonloop) << Pragma;
     return nullptr;
@@ -109,6 +114,7 @@ static Attr *handleLoopHintAttr(Sema &S, Stmt *St, const AttributeList &A,
     Option = LoopHintAttr::Unroll;
     State = LoopHintAttr::Disable;
   } else if (PragmaUnroll) {
+    printf("Sema Handle LoopHintAttr unroll\n");
     Spelling = LoopHintAttr::Pragma_unroll;
     if (ValueExpr) {
       // #pragma unroll N
@@ -117,6 +123,17 @@ static Attr *handleLoopHintAttr(Sema &S, Stmt *St, const AttributeList &A,
     } else {
       // #pragma unroll
       Option = LoopHintAttr::Unroll;
+      State = LoopHintAttr::Enable;
+    }
+  } else if (PragmaUnorderedFor) {
+    // nitish: #pragma unordered_for           
+    printf("Sema Handle LoopHintAttr unordered_for\n");
+    Spelling = LoopHintAttr::Pragma_unordered_for;                            
+    if ( ValueExpr ) {
+      Option = LoopHintAttr::UnorderedForCount;                                      
+      State = LoopHintAttr::Numeric;
+    } else {
+      Option = LoopHintAttr::UnorderedFor;                                      
       State = LoopHintAttr::Enable;
     }
   } else {
@@ -130,13 +147,17 @@ static Attr *handleLoopHintAttr(Sema &S, Stmt *St, const AttributeList &A,
                  .Case("vectorize_width", LoopHintAttr::VectorizeWidth)
                  .Case("interleave", LoopHintAttr::Interleave)
                  .Case("interleave_count", LoopHintAttr::InterleaveCount)
+		 // nitish add support for unordered_for
+		 .Case("unordered_for", LoopHintAttr::UnorderedFor)
+                 .Case("unordered_for_count", LoopHintAttr::UnorderedForCount)
                  .Case("unroll", LoopHintAttr::Unroll)
                  .Case("unroll_count", LoopHintAttr::UnrollCount)
                  .Case("distribute", LoopHintAttr::Distribute)
                  .Default(LoopHintAttr::Vectorize);
     if (Option == LoopHintAttr::VectorizeWidth ||
         Option == LoopHintAttr::InterleaveCount ||
-        Option == LoopHintAttr::UnrollCount) {
+        Option == LoopHintAttr::UnrollCount ||
+        Option == LoopHintAttr::UnorderedForCount ) { // nitish: unordered_for
       assert(ValueExpr && "Attribute must have a valid value expression.");
       if (S.CheckLoopHintExpr(ValueExpr, St->getLocStart()))
         return nullptr;
@@ -144,6 +165,7 @@ static Attr *handleLoopHintAttr(Sema &S, Stmt *St, const AttributeList &A,
     } else if (Option == LoopHintAttr::Vectorize ||
                Option == LoopHintAttr::Interleave ||
                Option == LoopHintAttr::Unroll ||
+               Option == LoopHintAttr::UnorderedFor ||  // nitish: unordered_for
                Option == LoopHintAttr::Distribute) {
       assert(StateLoc && StateLoc->Ident && "Loop hint must have an argument");
       if (StateLoc->Ident->isStr("disable"))
@@ -181,6 +203,7 @@ CheckForIncompatibleAttributes(Sema &S,
   } HintAttrs[] = {{nullptr, nullptr},
                    {nullptr, nullptr},
                    {nullptr, nullptr},
+                   {nullptr, nullptr}, // nitish: extra entry added for unordered_for
                    {nullptr, nullptr}};
 
   for (const auto *I : Attrs) {
@@ -191,7 +214,7 @@ CheckForIncompatibleAttributes(Sema &S,
       continue;
 
     LoopHintAttr::OptionType Option = LH->getOption();
-    enum { Vectorize, Interleave, Unroll, Distribute } Category;
+    enum { Vectorize, Interleave, Unroll, UnorderedFor, Distribute } Category;
     switch (Option) {
     case LoopHintAttr::Vectorize:
     case LoopHintAttr::VectorizeWidth:
@@ -200,6 +223,12 @@ CheckForIncompatibleAttributes(Sema &S,
     case LoopHintAttr::Interleave:
     case LoopHintAttr::InterleaveCount:
       Category = Interleave;
+      break;
+    // nitish: unordered_for
+    case LoopHintAttr::UnorderedFor:
+    case LoopHintAttr::UnorderedForCount:
+      printf("Setting the category to unordered_for\n");
+      Category = UnorderedFor;
       break;
     case LoopHintAttr::Unroll:
     case LoopHintAttr::UnrollCount:
@@ -215,10 +244,11 @@ CheckForIncompatibleAttributes(Sema &S,
     const LoopHintAttr *PrevAttr;
     if (Option == LoopHintAttr::Vectorize ||
         Option == LoopHintAttr::Interleave || Option == LoopHintAttr::Unroll ||
-        Option == LoopHintAttr::Distribute) {
+        Option == LoopHintAttr::Distribute || Option == LoopHintAttr::UnorderedFor ) {
       // Enable|Disable|AssumeSafety hint.  For example, vectorize(enable).
       PrevAttr = CategoryState.StateAttr;
       CategoryState.StateAttr = LH;
+      printf("Setting the StateAttr of %d to %d\n", Option, LH);
     } else {
       // Numeric hint.  For example, vectorize_width(8).
       PrevAttr = CategoryState.NumericAttr;
@@ -234,7 +264,7 @@ CheckForIncompatibleAttributes(Sema &S,
           << LH->getDiagnosticName(Policy);
 
     if (CategoryState.StateAttr && CategoryState.NumericAttr &&
-        (Category == Unroll ||
+        (Category == Unroll || Category == UnorderedFor || // nitish: unordered_for
          CategoryState.StateAttr->getState() == LoopHintAttr::Disable)) {
       // Disable hints are not compatible with numeric hints of the same
       // category.  As a special case, numeric unroll hints are also not

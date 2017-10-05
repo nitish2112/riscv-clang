@@ -11,6 +11,8 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include <stdio.h>
+
 #include "clang/AST/ASTContext.h"
 #include "clang/Basic/PragmaKinds.h"
 #include "clang/Basic/TargetInfo.h"
@@ -166,6 +168,13 @@ struct PragmaLoopHintHandler : public PragmaHandler {
                     Token &FirstToken) override;
 };
 
+// nitish: add support for "unordered_for                                      
+struct PragmaUnorderedForHintHandler : public PragmaHandler {                  
+  PragmaUnorderedForHintHandler(const char *name) : PragmaHandler(name) {} 
+  void HandlePragma(Preprocessor &PP, PragmaIntroducerKind Introducer,         
+                    Token &FirstToken) override;                               
+};
+
 struct PragmaUnrollHintHandler : public PragmaHandler {
   PragmaUnrollHintHandler(const char *name) : PragmaHandler(name) {}
   void HandlePragma(Preprocessor &PP, PragmaIntroducerKind Introducer,
@@ -290,6 +299,10 @@ void Parser::initializePragmaHandlers() {
   LoopHintHandler.reset(new PragmaLoopHintHandler());
   PP.AddPragmaHandler("clang", LoopHintHandler.get());
 
+  // nitish: adding support for "unordered_for"                            
+  UnorderedForHintHandler.reset(new PragmaUnorderedForHintHandler("unordered_for"));
+  PP.AddPragmaHandler(UnorderedForHintHandler.get());
+
   UnrollHintHandler.reset(new PragmaUnrollHintHandler("unroll"));
   PP.AddPragmaHandler(UnrollHintHandler.get());
 
@@ -376,6 +389,10 @@ void Parser::resetPragmaHandlers() {
 
   PP.RemovePragmaHandler("clang", LoopHintHandler.get());
   LoopHintHandler.reset();
+
+  // nitish: Add support for "unordered_for"                               
+  PP.RemovePragmaHandler(UnorderedForHintHandler.get());                   
+  UnorderedForHintHandler.reset();
 
   PP.RemovePragmaHandler(UnrollHintHandler.get());
   UnrollHintHandler.reset();
@@ -908,9 +925,12 @@ bool Parser::HandlePragmaLoopHint(LoopHint &Hint) {
 
   // Return a valid hint if pragma unroll or nounroll were specified
   // without an argument.
+  // nitish: add support for unordered_for                                 
+  bool PragmaUnorderedFor = PragmaNameInfo->getName() == "unordered_for";
   bool PragmaUnroll = PragmaNameInfo->getName() == "unroll";
   bool PragmaNoUnroll = PragmaNameInfo->getName() == "nounroll";
-  if (Toks.empty() && (PragmaUnroll || PragmaNoUnroll)) {
+  if (Toks.empty() && (PragmaUnroll || PragmaNoUnroll || PragmaUnorderedFor)) {
+    printf("Parser::HandlePragmaLoopHint exiting after just checking name and consuming token\n");
     ConsumeAnnotationToken();
     Hint.Range = Info->PragmaName.getLocation();
     return true;
@@ -922,25 +942,29 @@ bool Parser::HandlePragmaLoopHint(LoopHint &Hint) {
          "PragmaLoopHintInfo::Toks must contain at least one token.");
 
   // If no option is specified the argument is assumed to be a constant expr.
+  // nitish: unordered_for
+  bool OptionUnorderedFor = false;
   bool OptionUnroll = false;
   bool OptionDistribute = false;
   bool StateOption = false;
   if (OptionInfo) { // Pragma Unroll does not specify an option.
+    // nitish: unordered_for
+    OptionUnorderedFor = OptionInfo->isStr("unordered_for");
     OptionUnroll = OptionInfo->isStr("unroll");
     OptionDistribute = OptionInfo->isStr("distribute");
     StateOption = llvm::StringSwitch<bool>(OptionInfo->getName())
                       .Case("vectorize", true)
                       .Case("interleave", true)
                       .Default(false) ||
-                  OptionUnroll || OptionDistribute;
+                  OptionUnroll || OptionUnorderedFor || OptionDistribute ;
   }
 
-  bool AssumeSafetyArg = !OptionUnroll && !OptionDistribute;
+  bool AssumeSafetyArg = !OptionUnroll && !OptionDistribute && !OptionUnorderedFor; // nitish: unordered_for
   // Verify loop hint has an argument.
   if (Toks[0].is(tok::eof)) {
     ConsumeAnnotationToken();
     Diag(Toks[0].getLocation(), diag::err_pragma_loop_missing_argument)
-        << /*StateArgument=*/StateOption << /*FullKeyword=*/OptionUnroll
+        << /*StateArgument=*/StateOption << /*FullKeyword=*/OptionUnroll || OptionUnorderedFor // nitish: unordered_for
         << /*AssumeSafetyKeyword=*/AssumeSafetyArg;
     return false;
   }
@@ -954,12 +978,12 @@ bool Parser::HandlePragmaLoopHint(LoopHint &Hint) {
     bool Valid = StateInfo &&
                  llvm::StringSwitch<bool>(StateInfo->getName())
                      .Cases("enable", "disable", true)
-                     .Case("full", OptionUnroll)
+                     .Case("full", OptionUnroll || OptionUnorderedFor ) // nitish: unordered_for
                      .Case("assume_safety", AssumeSafetyArg)
                      .Default(false);
     if (!Valid) {
       Diag(Toks[0].getLocation(), diag::err_pragma_invalid_keyword)
-          << /*FullKeyword=*/OptionUnroll
+          << /*FullKeyword=*/OptionUnroll || OptionUnorderedFor // nitish: unordered_for
           << /*AssumeSafetyKeyword=*/AssumeSafetyArg;
       return false;
     }
@@ -2698,6 +2722,7 @@ void PragmaLoopHintHandler::HandlePragma(Preprocessor &PP,
     bool OptionValid = llvm::StringSwitch<bool>(OptionInfo->getName())
                            .Case("vectorize", true)
                            .Case("interleave", true)
+			   .Case("unordered_for", true) // nitish
                            .Case("unroll", true)
                            .Case("distribute", true)
                            .Case("vectorize_width", true)
@@ -2745,6 +2770,56 @@ void PragmaLoopHintHandler::HandlePragma(Preprocessor &PP,
   PP.EnterTokenStream(std::move(TokenArray), TokenList.size(),
                       /*DisableMacroExpansion=*/false);
 }
+
+// nitish: Added support for unordered_for
+void PragmaUnorderedForHintHandler::HandlePragma(Preprocessor &PP,
+                                           PragmaIntroducerKind Introducer,
+                                           Token &Tok) {
+  // Incoming token is "unordered_for" for "#pragma unordered_for"
+  Token PragmaName = Tok;
+  PP.Lex(Tok);
+  auto *Info = new (PP.getPreprocessorAllocator()) PragmaLoopHintInfo;
+  if (Tok.is(tok::eod)) {
+    // unordered_for pragma without an argument.
+    Info->PragmaName = PragmaName;
+    Info->Option.startToken();
+  } else {
+    // UnorderedFor pragma with an argument: "#pragma unordered_for N" or
+    // "#pragma unordered_for(N)".
+    // Read '(' if it exists.
+    bool ValueInParens = Tok.is(tok::l_paren);
+    if (ValueInParens)
+      PP.Lex(Tok);
+
+    Token Option;
+    Option.startToken();
+    if (ParseLoopHintValue(PP, Tok, PragmaName, Option, ValueInParens, *Info))
+      return;
+
+    // In CUDA, the argument to '#pragma unroll' should not be contained in
+    // parentheses.
+    if (PP.getLangOpts().CUDA && ValueInParens)
+      PP.Diag(Info->Toks[0].getLocation(),
+              diag::warn_pragma_unroll_cuda_value_in_parens);
+
+    if (Tok.isNot(tok::eod)) {
+      PP.Diag(Tok.getLocation(), diag::warn_pragma_extra_tokens_at_eol)
+          << "unordered_for";
+      return;
+    }
+  }
+
+  // Generate the hint token.
+  auto TokenArray = llvm::make_unique<Token[]>(1);
+  TokenArray[0].startToken();
+  TokenArray[0].setKind(tok::annot_pragma_loop_hint);
+  TokenArray[0].setLocation(PragmaName.getLocation());
+  TokenArray[0].setAnnotationEndLoc(PragmaName.getLocation());
+  TokenArray[0].setAnnotationValue(static_cast<void *>(Info));
+  PP.EnterTokenStream(std::move(TokenArray), 1,
+                      /*DisableMacroExpansion=*/false);
+}
+
 
 /// \brief Handle the loop unroll optimization pragmas.
 ///  #pragma unroll

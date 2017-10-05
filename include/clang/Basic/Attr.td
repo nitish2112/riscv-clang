@@ -2564,6 +2564,7 @@ def LoopHint : Attr {
   /// vectorize_width: vectorize loop operations with width 'Value'.
   /// interleave: interleave multiple loop iterations if State == Enable.
   /// interleave_count: interleaves 'Value' loop interations.
+  /// unordered_for: [nitish] added for parallel-micro-engine project
   /// unroll: fully unroll loop if State == Enable.
   /// unroll_count: unrolls loop 'Value' times.
   /// distribute: attempt to distribute loop if State == Enable
@@ -2574,19 +2575,22 @@ def LoopHint : Attr {
   /// expression: unrolls loop 'Value' times.
 
   let Spellings = [Pragma<"clang", "loop">, Pragma<"", "unroll">,
-                   Pragma<"", "nounroll">];
+                   Pragma<"", "nounroll">, Pragma<"", "unordered_for">];
 
   /// State of the loop optimization specified by the spelling.
   let Args = [EnumArgument<"Option", "OptionType",
                           ["vectorize", "vectorize_width", "interleave", "interleave_count",
+                           "unordered_for", "unordered_for_count", 
                            "unroll", "unroll_count", "distribute"],
                           ["Vectorize", "VectorizeWidth", "Interleave", "InterleaveCount",
+                           "UnorderedFor", "UnorderedForCount", 
                            "Unroll", "UnrollCount", "Distribute"]>,
               EnumArgument<"State", "LoopHintState",
                            ["enable", "disable", "numeric", "assume_safety", "full"],
                            ["Enable", "Disable", "Numeric", "AssumeSafety", "Full"]>,
               ExprArgument<"Value">];
 
+  // nitish: Added support for unordered_for
   let AdditionalMembers = [{
   static const char *getOptionName(int Option) {
     switch(Option) {
@@ -2594,6 +2598,8 @@ def LoopHint : Attr {
     case VectorizeWidth: return "vectorize_width";
     case Interleave: return "interleave";
     case InterleaveCount: return "interleave_count";
+    case UnorderedFor: return "unordered_for";
+    case UnorderedForCount: return "unordered_for_count";
     case Unroll: return "unroll";
     case UnrollCount: return "unroll_count";
     case Distribute: return "distribute";
@@ -2609,6 +2615,10 @@ def LoopHint : Attr {
       return;
     else if (SpellingIndex == Pragma_unroll) {
       OS << getValueString(Policy);
+      return;
+    } 
+    else if (SpellingIndex == Pragma_unordered_for){ 
+      OS << getValueString(Policy); 
       return;
     }
 
@@ -2643,6 +2653,8 @@ def LoopHint : Attr {
       return "#pragma nounroll";
     else if (SpellingIndex == Pragma_unroll)
       return "#pragma unroll" + (option == UnrollCount ? getValueString(Policy) : "");
+    else if (SpellingIndex == Pragma_unordered_for)
+      return "#pragma unordered_for" + (option == UnorderedForCount ? getValueString(Policy) : "");
 
     assert(SpellingIndex == Pragma_clang_loop && "Unexpected spelling");
     return getOptionName(option) + getValueString(Policy);

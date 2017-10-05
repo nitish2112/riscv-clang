@@ -46,6 +46,9 @@ struct LoopAttributes {
   /// \brief Value for llvm.loop.vectorize.enable metadata.
   LVEnableState VectorizeEnable;
 
+  // nitish: Add support for unordered_for
+  LVEnableState UnorderedForEnable;  
+
   /// \brief Value for llvm.loop.unroll.* metadata (enable, disable, or full).
   LVEnableState UnrollEnable;
 
@@ -57,6 +60,9 @@ struct LoopAttributes {
 
   /// \brief llvm.unroll.
   unsigned UnrollCount;
+
+  // nitish: unordered_for
+  unsigned UnorderedForCount;
 
   /// \brief Value for llvm.loop.distribute.enable metadata.
   LVEnableState DistributeEnable;
@@ -138,6 +144,11 @@ public:
         Enable ? LoopAttributes::Enable : LoopAttributes::Disable;
   }
 
+  // nitish: Set the Unordered_for state                              
+  void setUnorderedForState( const LoopAttributes::LVEnableState &State) {            
+    StagedAttrs.UnorderedForEnable = State;                                         
+  }
+
   /// \brief Set the next pushed loop unroll state.
   void setUnrollState(const LoopAttributes::LVEnableState &State) {
     StagedAttrs.UnrollEnable = State;
@@ -148,6 +159,9 @@ public:
 
   /// \brief Set the interleave count for the next loop pushed.
   void setInterleaveCount(unsigned C) { StagedAttrs.InterleaveCount = C; }
+
+  // nitish: unordered_for
+  void setUnorderedForCount(unsigned C) { StagedAttrs.UnorderedForCount = C; }
 
   /// \brief Set the unroll count for the next loop pushed.
   void setUnrollCount(unsigned C) { StagedAttrs.UnrollCount = C; }

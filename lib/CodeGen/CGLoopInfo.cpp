@@ -25,7 +25,10 @@ static MDNode *createMetadata(LLVMContext &Ctx, const LoopAttributes &Attrs,
 
   if (!Attrs.IsParallel && Attrs.VectorizeWidth == 0 &&
       Attrs.InterleaveCount == 0 && Attrs.UnrollCount == 0 &&
+      Attrs.UnorderedForCount == 0 && // nitish: unordered_for
       Attrs.VectorizeEnable == LoopAttributes::Unspecified &&
+      // nitish: add support for unordered_for
+      Attrs.UnorderedForEnable == LoopAttributes::Unspecified &&
       Attrs.UnrollEnable == LoopAttributes::Unspecified &&
       Attrs.DistributeEnable == LoopAttributes::Unspecified &&
       !StartLoc && !EndLoc)
@@ -61,6 +64,15 @@ static MDNode *createMetadata(LLVMContext &Ctx, const LoopAttributes &Attrs,
     Args.push_back(MDNode::get(Ctx, Vals));
   }
 
+
+  // nitish: unordered_for
+  if (Attrs.UnorderedForCount > 0) {
+    Metadata *Vals[] = {MDString::get(Ctx, "llvm.loop.unordered_for.count"),
+                        ConstantAsMetadata::get(ConstantInt::get(
+                            Type::getInt32Ty(Ctx), Attrs.UnorderedForCount))};
+    Args.push_back(MDNode::get(Ctx, Vals));
+  }
+
   // Setting interleave.count
   if (Attrs.UnrollCount > 0) {
     Metadata *Vals[] = {MDString::get(Ctx, "llvm.loop.unroll.count"),
@@ -76,6 +88,19 @@ static MDNode *createMetadata(LLVMContext &Ctx, const LoopAttributes &Attrs,
                             Type::getInt1Ty(Ctx), (Attrs.VectorizeEnable ==
                                                    LoopAttributes::Enable)))};
     Args.push_back(MDNode::get(Ctx, Vals));
+  }
+
+  // nitish: adding support for pragma "unordered_for"
+  if (Attrs.UnorderedForEnable != LoopAttributes::Unspecified) {                             
+    std::string Name;
+    if (Attrs.UnorderedForEnable == LoopAttributes::Enable)
+      Name = "llvm.loop.unordered_for.enable";                         
+    else if (Attrs.UnorderedForEnable == LoopAttributes::Full)
+      Name = "llvm.loop.unordered_for.full";   
+    else
+      Name = "llvm.loop.unordered_for.disable";   
+    Metadata *Vals[] = {MDString::get(Ctx, Name)};                            
+    Args.push_back(MDNode::get(Ctx, Vals));                                   
   }
 
   // Setting unroll.full or unroll.disable
@@ -107,16 +132,21 @@ static MDNode *createMetadata(LLVMContext &Ctx, const LoopAttributes &Attrs,
 
 LoopAttributes::LoopAttributes(bool IsParallel)
     : IsParallel(IsParallel), VectorizeEnable(LoopAttributes::Unspecified),
+      UnorderedForEnable(LoopAttributes::Unspecified), // nitish: unordered_for
       UnrollEnable(LoopAttributes::Unspecified), VectorizeWidth(0),
-      InterleaveCount(0), UnrollCount(0),
+      InterleaveCount(0), UnrollCount(0), UnorderedForCount(0), // nitish: unordered_for
       DistributeEnable(LoopAttributes::Unspecified) {}
 
 void LoopAttributes::clear() {
   IsParallel = false;
   VectorizeWidth = 0;
   InterleaveCount = 0;
+  // nitish: unordered_for
+  UnorderedForCount = 0;
   UnrollCount = 0;
   VectorizeEnable = LoopAttributes::Unspecified;
+  // nitish: unordered_for
+  UnorderedForEnable = LoopAttributes::Unspecified;
   UnrollEnable = LoopAttributes::Unspecified;
   DistributeEnable = LoopAttributes::Unspecified;
 }
@@ -188,6 +218,10 @@ void LoopInfoStack::push(BasicBlock *Header, clang::ASTContext &Ctx,
         // Disable interleaving by speciyfing a count of 1.
         setInterleaveCount(1);
         break;
+       // nitish: Added support for unordered_for
+      case LoopHintAttr::UnorderedFor:
+        setUnorderedForState(LoopAttributes::Disable);
+        break;
       case LoopHintAttr::Unroll:
         setUnrollState(LoopAttributes::Disable);
         break;
@@ -195,6 +229,7 @@ void LoopInfoStack::push(BasicBlock *Header, clang::ASTContext &Ctx,
         setDistributeState(false);
         break;
       case LoopHintAttr::UnrollCount:
+      case LoopHintAttr::UnorderedForCount: // nitish: unordered_for
       case LoopHintAttr::VectorizeWidth:
       case LoopHintAttr::InterleaveCount:
         llvm_unreachable("Options cannot be disabled.");
@@ -207,6 +242,10 @@ void LoopInfoStack::push(BasicBlock *Header, clang::ASTContext &Ctx,
       case LoopHintAttr::Interleave:
         setVectorizeEnable(true);
         break;
+      // nitish: Added support for unordered_forh
+      case LoopHintAttr::UnorderedFor:
+        setUnorderedForState(LoopAttributes::Enable);
+        break;
       case LoopHintAttr::Unroll:
         setUnrollState(LoopAttributes::Enable);
         break;
@@ -214,6 +253,7 @@ void LoopInfoStack::push(BasicBlock *Header, clang::ASTContext &Ctx,
         setDistributeState(true);
         break;
       case LoopHintAttr::UnrollCount:
+      case LoopHintAttr::UnorderedForCount: // nitish: unordered_for
       case LoopHintAttr::VectorizeWidth:
       case LoopHintAttr::InterleaveCount:
         llvm_unreachable("Options cannot enabled.");
@@ -228,6 +268,9 @@ void LoopInfoStack::push(BasicBlock *Header, clang::ASTContext &Ctx,
         setParallel(true);
         setVectorizeEnable(true);
         break;
+      // nitish: added support for unordered_for
+      case LoopHintAttr::UnorderedFor:
+      case LoopHintAttr::UnorderedForCount:
       case LoopHintAttr::Unroll:
       case LoopHintAttr::UnrollCount:
       case LoopHintAttr::VectorizeWidth:
@@ -239,11 +282,16 @@ void LoopInfoStack::push(BasicBlock *Header, clang::ASTContext &Ctx,
       break;
     case LoopHintAttr::Full:
       switch (Option) {
+      // nitish: add support for unordered_for
+      case LoopHintAttr::UnorderedFor:
+        setUnorderedForState(LoopAttributes::Full);
+        break;
       case LoopHintAttr::Unroll:
         setUnrollState(LoopAttributes::Full);
         break;
       case LoopHintAttr::Vectorize:
       case LoopHintAttr::Interleave:
+      case LoopHintAttr::UnorderedForCount: // nitish: unordered_for
       case LoopHintAttr::UnrollCount:
       case LoopHintAttr::VectorizeWidth:
       case LoopHintAttr::InterleaveCount:
@@ -260,9 +308,14 @@ void LoopInfoStack::push(BasicBlock *Header, clang::ASTContext &Ctx,
       case LoopHintAttr::InterleaveCount:
         setInterleaveCount(ValueInt);
         break;
+      // nitish: unordered_for
+      case LoopHintAttr::UnorderedForCount:
+        setUnorderedForCount(ValueInt);
+        break;
       case LoopHintAttr::UnrollCount:
         setUnrollCount(ValueInt);
         break;
+      case LoopHintAttr::UnorderedFor: // nitish: unordered_for
       case LoopHintAttr::Unroll:
       case LoopHintAttr::Vectorize:
       case LoopHintAttr::Interleave:
