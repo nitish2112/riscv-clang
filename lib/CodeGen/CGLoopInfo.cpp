@@ -26,9 +26,12 @@ static MDNode *createMetadata(LLVMContext &Ctx, const LoopAttributes &Attrs,
   if (!Attrs.IsParallel && Attrs.VectorizeWidth == 0 &&
       Attrs.InterleaveCount == 0 && Attrs.UnrollCount == 0 &&
       Attrs.UnorderedForCount == 0 && // nitish: unordered_for
+      Attrs.FeederCount == 0 && // nitish: feeder
       Attrs.VectorizeEnable == LoopAttributes::Unspecified &&
-      // nitish: add support for unordered_for
+      // nitish: add support for unordered_for and feeder
       Attrs.UnorderedForEnable == LoopAttributes::Unspecified &&
+      Attrs.FeederEnable == LoopAttributes::Unspecified &&
+
       Attrs.UnrollEnable == LoopAttributes::Unspecified &&
       Attrs.DistributeEnable == LoopAttributes::Unspecified &&
       !StartLoc && !EndLoc)
@@ -73,6 +76,14 @@ static MDNode *createMetadata(LLVMContext &Ctx, const LoopAttributes &Attrs,
     Args.push_back(MDNode::get(Ctx, Vals));
   }
 
+  // nitish: feeder
+  if (Attrs.FeederCount > 0) {
+    Metadata *Vals[] = {MDString::get(Ctx, "llvm.loop.feeder.count"),
+                        ConstantAsMetadata::get(ConstantInt::get(
+                            Type::getInt32Ty(Ctx), Attrs.FeederCount))};
+    Args.push_back(MDNode::get(Ctx, Vals));
+  }
+
   // Setting interleave.count
   if (Attrs.UnrollCount > 0) {
     Metadata *Vals[] = {MDString::get(Ctx, "llvm.loop.unroll.count"),
@@ -99,6 +110,19 @@ static MDNode *createMetadata(LLVMContext &Ctx, const LoopAttributes &Attrs,
       Name = "llvm.loop.unordered_for.full";   
     else
       Name = "llvm.loop.unordered_for.disable";   
+    Metadata *Vals[] = {MDString::get(Ctx, Name)};                            
+    Args.push_back(MDNode::get(Ctx, Vals));                                   
+  }
+
+  // nitish: adding support for pragma "feeder"
+  if (Attrs.FeederEnable != LoopAttributes::Unspecified) {                             
+    std::string Name;
+    if (Attrs.FeederEnable == LoopAttributes::Enable)
+      Name = "llvm.loop.feeder.enable";                         
+    else if (Attrs.FeederEnable == LoopAttributes::Full)
+      Name = "llvm.loop.feeder.full";   
+    else
+      Name = "llvm.loop.feeder.disable";   
     Metadata *Vals[] = {MDString::get(Ctx, Name)};                            
     Args.push_back(MDNode::get(Ctx, Vals));                                   
   }
@@ -133,8 +157,9 @@ static MDNode *createMetadata(LLVMContext &Ctx, const LoopAttributes &Attrs,
 LoopAttributes::LoopAttributes(bool IsParallel)
     : IsParallel(IsParallel), VectorizeEnable(LoopAttributes::Unspecified),
       UnorderedForEnable(LoopAttributes::Unspecified), // nitish: unordered_for
+      FeederEnable(LoopAttributes::Unspecified), // nitish: feeder
       UnrollEnable(LoopAttributes::Unspecified), VectorizeWidth(0),
-      InterleaveCount(0), UnrollCount(0), UnorderedForCount(0), // nitish: unordered_for
+      InterleaveCount(0), UnrollCount(0), UnorderedForCount(0), FeederCount(0), // nitish: unordered_for and feeder
       DistributeEnable(LoopAttributes::Unspecified) {}
 
 void LoopAttributes::clear() {
@@ -143,10 +168,14 @@ void LoopAttributes::clear() {
   InterleaveCount = 0;
   // nitish: unordered_for
   UnorderedForCount = 0;
+  // nitish: feeder
+  FeederCount = 0;
   UnrollCount = 0;
   VectorizeEnable = LoopAttributes::Unspecified;
   // nitish: unordered_for
   UnorderedForEnable = LoopAttributes::Unspecified;
+  // nitish: feeder
+  FeederEnable = LoopAttributes::Unspecified;
   UnrollEnable = LoopAttributes::Unspecified;
   DistributeEnable = LoopAttributes::Unspecified;
 }
@@ -222,6 +251,10 @@ void LoopInfoStack::push(BasicBlock *Header, clang::ASTContext &Ctx,
       case LoopHintAttr::UnorderedFor:
         setUnorderedForState(LoopAttributes::Disable);
         break;
+       // nitish: Added support for feeder
+      case LoopHintAttr::Feeder:
+        setFeederState(LoopAttributes::Disable);
+        break;
       case LoopHintAttr::Unroll:
         setUnrollState(LoopAttributes::Disable);
         break;
@@ -230,6 +263,7 @@ void LoopInfoStack::push(BasicBlock *Header, clang::ASTContext &Ctx,
         break;
       case LoopHintAttr::UnrollCount:
       case LoopHintAttr::UnorderedForCount: // nitish: unordered_for
+      case LoopHintAttr::FeederCount: // nitish: feeder
       case LoopHintAttr::VectorizeWidth:
       case LoopHintAttr::InterleaveCount:
         llvm_unreachable("Options cannot be disabled.");
@@ -242,9 +276,13 @@ void LoopInfoStack::push(BasicBlock *Header, clang::ASTContext &Ctx,
       case LoopHintAttr::Interleave:
         setVectorizeEnable(true);
         break;
-      // nitish: Added support for unordered_forh
+      // nitish: Added support for unordered_for
       case LoopHintAttr::UnorderedFor:
         setUnorderedForState(LoopAttributes::Enable);
+        break;
+      // nitish: Added support for feeder
+      case LoopHintAttr::Feeder:
+        setFeederState(LoopAttributes::Enable);
         break;
       case LoopHintAttr::Unroll:
         setUnrollState(LoopAttributes::Enable);
@@ -254,6 +292,7 @@ void LoopInfoStack::push(BasicBlock *Header, clang::ASTContext &Ctx,
         break;
       case LoopHintAttr::UnrollCount:
       case LoopHintAttr::UnorderedForCount: // nitish: unordered_for
+      case LoopHintAttr::FeederCount: // nitish: feeder
       case LoopHintAttr::VectorizeWidth:
       case LoopHintAttr::InterleaveCount:
         llvm_unreachable("Options cannot enabled.");
@@ -271,6 +310,10 @@ void LoopInfoStack::push(BasicBlock *Header, clang::ASTContext &Ctx,
       // nitish: added support for unordered_for
       case LoopHintAttr::UnorderedFor:
       case LoopHintAttr::UnorderedForCount:
+      // nitish: added support for feeder
+      case LoopHintAttr::Feeder:
+      case LoopHintAttr::FeederCount:
+
       case LoopHintAttr::Unroll:
       case LoopHintAttr::UnrollCount:
       case LoopHintAttr::VectorizeWidth:
@@ -286,12 +329,17 @@ void LoopInfoStack::push(BasicBlock *Header, clang::ASTContext &Ctx,
       case LoopHintAttr::UnorderedFor:
         setUnorderedForState(LoopAttributes::Full);
         break;
+      // nitish: add support for feeder
+      case LoopHintAttr::Feeder:
+        setFeederState(LoopAttributes::Full);
+        break;
       case LoopHintAttr::Unroll:
         setUnrollState(LoopAttributes::Full);
         break;
       case LoopHintAttr::Vectorize:
       case LoopHintAttr::Interleave:
       case LoopHintAttr::UnorderedForCount: // nitish: unordered_for
+      case LoopHintAttr::FeederCount: // nitish: feeder
       case LoopHintAttr::UnrollCount:
       case LoopHintAttr::VectorizeWidth:
       case LoopHintAttr::InterleaveCount:
@@ -312,10 +360,15 @@ void LoopInfoStack::push(BasicBlock *Header, clang::ASTContext &Ctx,
       case LoopHintAttr::UnorderedForCount:
         setUnorderedForCount(ValueInt);
         break;
+      // nitish: feeder
+      case LoopHintAttr::FeederCount:
+        setFeederCount(ValueInt);
+        break;
       case LoopHintAttr::UnrollCount:
         setUnrollCount(ValueInt);
         break;
       case LoopHintAttr::UnorderedFor: // nitish: unordered_for
+      case LoopHintAttr::Feeder: // nitish: feeder
       case LoopHintAttr::Unroll:
       case LoopHintAttr::Vectorize:
       case LoopHintAttr::Interleave:

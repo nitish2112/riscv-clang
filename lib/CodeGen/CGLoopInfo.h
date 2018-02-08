@@ -48,6 +48,8 @@ struct LoopAttributes {
 
   // nitish: Add support for unordered_for
   LVEnableState UnorderedForEnable;  
+  // nitish: Add support for feeder
+  LVEnableState FeederEnable;  
 
   /// \brief Value for llvm.loop.unroll.* metadata (enable, disable, or full).
   LVEnableState UnrollEnable;
@@ -63,6 +65,8 @@ struct LoopAttributes {
 
   // nitish: unordered_for
   unsigned UnorderedForCount;
+  // nitish: feeder
+  unsigned FeederCount;
 
   /// \brief Value for llvm.loop.distribute.enable metadata.
   LVEnableState DistributeEnable;
@@ -149,6 +153,11 @@ public:
     StagedAttrs.UnorderedForEnable = State;                                         
   }
 
+  // nitish: Set the Feeder state                              
+  void setFeederState( const LoopAttributes::LVEnableState &State) {            
+    StagedAttrs.FeederEnable = State;                                         
+  }
+
   /// \brief Set the next pushed loop unroll state.
   void setUnrollState(const LoopAttributes::LVEnableState &State) {
     StagedAttrs.UnrollEnable = State;
@@ -162,6 +171,8 @@ public:
 
   // nitish: unordered_for
   void setUnorderedForCount(unsigned C) { StagedAttrs.UnorderedForCount = C; }
+  // nitish: feeder
+  void setFeederCount(unsigned C) { StagedAttrs.FeederCount = C; }
 
   /// \brief Set the unroll count for the next loop pushed.
   void setUnrollCount(unsigned C) { StagedAttrs.UnrollCount = C; }
